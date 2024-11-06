@@ -1,0 +1,214 @@
+#!/bin/bash
+
+# Definir as cores
+RESET="\033[0m"          # Resetar cor
+BOLD="\033[1m"           # Negrito
+ITALIC="\033[3m"         # Itálico
+UNDERLINE="\033[4m"      # Sublinhado
+RED="\033[31m"           # Vermelho
+GREEN="\033[32m"         # Verde
+YELLOW="\033[33m"        # Amarelo
+BLUE="\033[34m"          # Azul
+CYAN="\033[36m"          # Ciano
+WHITE="\033[97m"         # Branco
+PURPLE="\033[35m"        # Roxo
+LIGHT_BLUE="\033[94m"    # Azul Claro
+ORANGE="\033[38;5;214m"  # Laranja
+
+# Função para exibir a arte "HELLO" com a vaca
+show_hello_art() {
+    echo -e "${CYAN}${BOLD}"
+    echo "         (__)"
+    echo "         (oo)"
+    echo "  /-------\\/ "
+    echo " / |     ||  "
+    echo "^  ||----||"
+    echo "   ^^    ^^"
+    echo ""
+    echo "   Moooooo!   "
+    echo "    HELLO!     "
+    echo -e "${RESET}"
+}
+
+# Função para exibir a mensagem de boas-vindas
+welcome_message() {
+    show_hello_art
+    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════╗"
+    echo -e "║  Bem-vindo ao MOOH.. Info!             ║"
+    echo -e "║  Consultando Domínios e IPs           ║"
+    echo -e "╚════════════════════════════════════════╝"
+    echo -e "${GREEN}Este script permite consultar informações sobre IPs e Domínios.${RESET}"
+    echo -e "${YELLOW}Digite um IP ou Domínio para obter informações.${RESET}"
+    separator
+}
+
+# Função para exibir uma linha de separação
+separator() {
+    echo -e "${LIGHT_BLUE}==============================================${RESET}"
+}
+
+# Função para obter o IP de um domínio
+get_ip_from_domain() {
+    ip=$(host "$1" | grep "has address" | awk '{print $4}')
+    if [[ -n "$ip" ]]; then
+        echo "$ip"
+    else
+        echo -e "${RED}Não foi possível obter o IP para o domínio: $1${RESET}"
+    fi
+}
+
+# Função para pegar os servidores DNS usando o comando 'whois'
+get_dns_from_whois() {
+    whois_output=$(whois "$1")
+    dns_servers=$(echo "$whois_output" | grep -i "nserver" | awk '{print $2}')
+    
+    if [[ -n "$dns_servers" ]]; then
+        echo "$dns_servers"
+    else
+        echo -e "${RED}Servidor DNS não encontrado.${RESET}"
+    fi
+}
+
+# Função para pegar o provedor (organização) de um IP ou domínio
+get_provider_from_whois() {
+    whois_output=$(whois "$1")
+    provider=$(echo "$whois_output" | grep -i "OrgName" | head -n 1 | cut -d: -f2)
+    
+    if [[ -n "$provider" ]]; then
+        echo "$provider"
+    else
+        echo -e "${RED}Provedor não encontrado.${RESET}"
+    fi
+}
+
+# Função para obter registros DNS adicionais: A, MX, AAAA, TXT
+get_dns_records() {
+    domain=$1
+    echo -e "${CYAN}${BOLD}Registros DNS do domínio:${RESET}"
+
+    # Registros A (IPv4)
+    echo -e "${GREEN}Registros A (IPv4):${RESET}"
+    a_records=$(dig +short "$domain" A)
+    if [[ -n "$a_records" ]]; then
+        echo "$a_records"
+    else
+        echo "Nenhum registro A encontrado."
+    fi
+
+    # Registros AAAA (IPv6)
+    echo -e "${GREEN}Registros AAAA (IPv6):${RESET}"
+    aaaa_records=$(dig +short "$domain" AAAA)
+    if [[ -n "$aaaa_records" ]]; then
+        echo "$aaaa_records"
+    else
+        echo "Nenhum registro AAAA encontrado."
+    fi
+
+    # Registros MX (Mail Exchange)
+    echo -e "${GREEN}Registros MX (Mail Exchange):${RESET}"
+    mx_records=$(dig +short "$domain" MX)
+    if [[ -n "$mx_records" ]]; then
+        echo "$mx_records"
+    else
+        echo "Nenhum registro MX encontrado."
+    fi
+
+    # Registros TXT (Text)
+    echo -e "${GREEN}Registros TXT (Texto):${RESET}"
+    txt_records=$(dig +short "$domain" TXT)
+    if [[ -n "$txt_records" ]]; then
+        echo "$txt_records"
+    else
+        echo "Nenhum registro TXT encontrado."
+    fi
+}
+
+# Função para obter geolocalização de um IP
+get_geolocation() {
+    ip=$1
+    echo -e "${CYAN}${BOLD}Geolocalização do IP:${RESET}"
+    geolocation=$(curl -s "http://ipinfo.io/$ip/json" | jq '.city, .region, .country')
+    
+    if [[ -n "$geolocation" ]]; then
+        echo "$geolocation"
+    else
+        echo -e "${RED}Não foi possível obter a geolocalização.${RESET}"
+    fi
+}
+
+# Função para verificar se o domínio possui um certificado SSL válido
+check_ssl_certificate() {
+    domain=$1
+    echo -e "${CYAN}${BOLD}Verificação SSL/TLS:${RESET}"
+    ssl_check=$(echo | openssl s_client -connect "$domain":443 -servername "$domain" 2>/dev/null | openssl x509 -noout -dates)
+    
+    if [[ -n "$ssl_check" ]]; then
+        echo "Certificado SSL/TLS válido:"
+        echo "$ssl_check"
+    else
+        echo -e "${RED}Não foi possível verificar o certificado SSL/TLS.${RESET}"
+    fi
+}
+
+# Função para verificar as 100 principais portas com Nmap
+run_nmap_scan() {
+    target=$1
+    echo -e "${CYAN}${BOLD}Iniciando Nmap - Scan das 100 principais portas:${RESET}"
+    
+    # Verifica se o Nmap está instalado
+    if ! command -v nmap &> /dev/null; then
+        echo -e "${RED}Erro: O Nmap não está instalado no sistema.${RESET}"
+        exit 1
+    fi
+    
+    # Executa o Nmap com as opções desejadas
+    nmap -sS -Pn --top-ports 100 "$target" | tee nmap_scan_results.txt
+}
+
+# Função principal para consulta de IP ou domínio
+perform_whois_query() {
+    local site_or_ip=$1
+    local ip dns provider
+    
+    # Se for um domínio, primeiro pega os servidores DNS
+    if [[ ! "$site_or_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${YELLOW}Consultando DNS para o domínio: ${WHITE}$site_or_ip${RESET}"
+        dns=$(get_dns_from_whois "$site_or_ip")
+        ip=$(get_ip_from_domain "$site_or_ip")
+        get_dns_records "$site_or_ip"
+    else
+        # Se for um IP, consulta diretamente
+        echo -e "${YELLOW}Consultando informações para o IP: ${WHITE}$site_or_ip${RESET}"
+        dns="Não aplicável para IP."
+        ip=$site_or_ip
+    fi
+    
+    provider=$(get_provider_from_whois "$site_or_ip")
+    get_geolocation "$ip"
+    check_ssl_certificate "$site_or_ip"
+    
+    # Exibe as informações de forma organizada
+    show_info "$ip" "$dns" "$provider"
+    
+    # Realiza o scan de Nmap para as 100 principais portas
+    run_nmap_scan "$site_or_ip"
+}
+
+# Função para exibir as informações de forma limpa
+show_info() {
+    echo -e "${CYAN}${BOLD}Informações Obtidas:${RESET}"
+    echo -e "${GREEN}IP: ${WHITE}$1${RESET}"
+    echo -e "${GREEN}Servidor DNS: ${WHITE}$2${RESET}"
+    echo -e "${GREEN}Provedor: ${WHITE}$3${RESET}"
+}
+
+# Função de controle de entrada de dados
+get_domain_or_ip() {
+    echo -e "${CYAN}Digite um IP ou Domínio: ${WHITE}"  # Exibe a cor do prompt
+    read input   # Captura a entrada do usuário
+    perform_whois_query "$input"
+}
+
+# Iniciar o programa
+welcome_message
+get_domain_or_ip
